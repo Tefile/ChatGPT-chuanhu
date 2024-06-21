@@ -1,11 +1,11 @@
 from types import SimpleNamespace
 import pdfplumber
 import logging
-from llama_index import Document
+from langchain.docstore.document import Document
 
 def prepare_table_config(crop_page):
     """Prepare table查找边界, 要求page为原始page
-    
+
     From https://github.com/jsvine/pdfplumber/issues/242
     """
     page = crop_page.root_page # root/parent
@@ -60,8 +60,8 @@ def get_title_with_cropped_page(first_page):
             title_bottom = word.bottom
         elif word.text == "Abstract": # 获取页面abstract
             top = word.top
-    
-    user_info = [i["text"] for i in extract_words(first_page.within_bbox((x0,title_bottom,x1,top)))]
+
+    user_info = [i["text"] for i in extract_words(first_page.within_bbox((x0,title_bottom,x1,bottom)))]
     # 裁剪掉上半部分, within_bbox: full_included; crop: partial_included
     return title, user_info, first_page.within_bbox((x0,top,x1,bottom))
 
@@ -75,7 +75,7 @@ def get_column_cropped_pages(pages, two_column=True):
             new_pages.append(right)
         else:
             new_pages.append(page)
-    
+
     return new_pages
 
 def parse_pdf(filename, two_column = True):
@@ -94,7 +94,7 @@ def parse_pdf(filename, two_column = True):
             name_top=name_top,
             name_bottom=name_bottom,
             record_chapter_name = True,
-            
+
             page_start=page_start,
             page_stop=None,
 
@@ -114,7 +114,7 @@ def parse_pdf(filename, two_column = True):
                 if word.size >= 11: # 出现chapter name
                     if cur_chapter is None:
                         cur_chapter = create_chapter(page.page_number, word.top, word.bottom)
-                    elif not cur_chapter.record_chapter_name or (cur_chapter.name_bottom != cur_chapter.name_bottom and cur_chapter.name_top != cur_chapter.name_top): 
+                    elif not cur_chapter.record_chapter_name or (cur_chapter.name_bottom != cur_chapter.name_bottom and cur_chapter.name_top != cur_chapter.name_top):
                         # 不再继续写chapter name
                         cur_chapter.page_stop = page.page_number # stop id
                         chapters.append(cur_chapter)
@@ -143,34 +143,7 @@ def parse_pdf(filename, two_column = True):
         text += f"The {idx}th Chapter {chapter.name}: " + " ".join(chapter.text) + "\n"
 
     logging.getLogger().setLevel(level)
-    return Document(text=text, extra_info={"title": title})
-
-BASE_POINTS = """
-1. Who are the authors?
-2. What is the process of the proposed method?
-3. What is the performance of the proposed method? Please note down its performance metrics.
-4. What are the baseline models and their performances? Please note down these baseline methods.
-5. What dataset did this paper use?
-"""
-
-READING_PROMPT = """
-You are a researcher helper bot. You can help the user with research paper reading and summarizing. \n
-Now I am going to send you a paper. You need to read it and summarize it for me part by part. \n
-When you are reading, You need to focus on these key points:{}
-"""
-
-READING_PROMT_V2 = """
-You are a researcher helper bot. You can help the user with research paper reading and summarizing. \n
-Now I am going to send you a paper. You need to read it and summarize it for me part by part. \n
-When you are reading, You need to focus on these key points:{},
-
-And You need to generate a brief but informative title for this part.
-Your return format:
-- title: '...'
-- summary: '...'
-"""
-
-SUMMARY_PROMPT = "You are a researcher helper bot. Now you need to read the summaries of a research paper."
+    return Document(page_content=text, metadata={"title": title})
 
 
 if __name__ == '__main__':
@@ -178,3 +151,4 @@ if __name__ == '__main__':
     z = parse_pdf("./build/test.pdf")
     print(z["user_info"])
     print(z["title"])
+
